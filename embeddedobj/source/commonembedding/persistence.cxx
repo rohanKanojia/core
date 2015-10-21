@@ -466,9 +466,11 @@ void OCommonEmbeddedObject::FillDefaultLoadArgs_Impl( const uno::Reference< embe
     o_rLoadArgs.put( "ReadOnly", m_bReadOnly );
 
     OUString aFilterName = GetFilterName( ::comphelper::OStorageHelper::GetXStorageFormat( i_rxStorage ) );
-    SAL_WARN_IF( aFilterName.isEmpty(), "embeddedobj.common", "OCommonEmbeddedObject::FillDefaultLoadArgs_Impl: Wrong document service name!" );
     if ( aFilterName.isEmpty() )
-        throw io::IOException();    // TODO: error message/code
+    {
+        SAL_WARN( "embeddedobj.common", OSL_THIS_FUNC << ": Wrong document service name" );
+        throw io::IOException();
+    }
 
     o_rLoadArgs.put( "FilterName", aFilterName );
 }
@@ -752,10 +754,13 @@ void OCommonEmbeddedObject::StoreDocToStorage_Impl(
     const OUString& aHierarchName,
     bool bAttachToTheStorage )
 {
-    SAL_WARN_IF( !xStorage.is(), "embeddedobj.common", "No storage is provided for storing!" );
+    SAL_INFO( "embeddedobj.common", "entering >>OCommonEmbeddedObject::StoreDocToStorage_Impl<<" );
 
     if ( !xStorage.is() )
-        throw uno::RuntimeException(); // TODO:
+    {
+        SAL_WARN( "embeddedobj.common", "No storage is provided for storing" );
+        return; // just return enjoying the silence
+    }
 
     uno::Reference< document::XStorageBasedDocument > xDoc;
     {
@@ -790,7 +795,12 @@ void OCommonEmbeddedObject::StoreDocToStorage_Impl(
         aArgs[4].Name = "DestinationShellID";
         aArgs[4].Value <<= getStringPropertyValue(rObjArgs, "DestinationShellID");
 
-        xDoc->storeToStorage( xStorage, aArgs );
+        try
+        {
+            xDoc->storeToStorage( xStorage, aArgs );
+        }
+        catch ( ... ) { }
+
         if ( bAttachToTheStorage )
             SwitchDocToStorage_Impl( xDoc, xStorage );
     }
@@ -857,9 +867,7 @@ uno::Reference< util::XCloseable > OCommonEmbeddedObject::CreateDocFromMediaDesc
 
 uno::Reference< util::XCloseable > OCommonEmbeddedObject::CreateTempDocFromLink_Impl()
 {
-    uno::Reference< util::XCloseable > xResult;
-
-    SAL_WARN_IF( !m_bIsLink, "embeddedobj.common", "The object is not a linked one!" );
+    SAL_WARN_IF( !m_bIsLink, "embeddedobj.common", "The object is not a linked one" );
 
     uno::Sequence< beans::PropertyValue > aTempMediaDescr;
 
@@ -867,13 +875,10 @@ uno::Reference< util::XCloseable > OCommonEmbeddedObject::CreateTempDocFromLink_
     try {
         nStorageFormat = ::comphelper::OStorageHelper::GetXStorageFormat( m_xParentStorage );
     }
-    catch ( const beans::IllegalTypeException& )
+    catch ( ... )
     {
         // the container just has an unknown type, use current file format
-    }
-    catch ( const uno::Exception& )
-    {
-        SAL_WARN( "embeddedobj.common", "Can not retrieve storage media type!" );
+        SAL_WARN( "embeddedobj.common", "can't retrieve storage media type" );
     }
 
     if ( m_pDocHolder->GetComponent().is() )
@@ -889,14 +894,13 @@ uno::Reference< util::XCloseable > OCommonEmbeddedObject::CreateTempDocFromLink_
         {
             // no need to let the file stay after the stream is removed since the embedded document
             // can not be stored directly
-            uno::Reference< beans::XPropertySet > xTempStreamProps( xTempStream, uno::UNO_QUERY_THROW );
-            xTempStreamProps->getPropertyValue("Uri") >>= aTempFileURL;
+            uno::Reference< beans::XPropertySet > xTempStreamProps( xTempStream, uno::UNO_QUERY );
+            if ( xTempStreamProps.is() )
+                xTempStreamProps->getPropertyValue("Uri") >>= aTempFileURL;
         }
-        catch( const uno::Exception& )
-        {
-        }
+        catch( ... ) { }
 
-        SAL_WARN_IF( aTempFileURL.isEmpty(), "embeddedobj.common", "Couldn't retrieve temporary file URL!" );
+        SAL_WARN_IF( aTempFileURL.isEmpty(), "embeddedobj.common", "couldn't retrieve temporary file URL" );
 
         aTempMediaDescr[0].Name = "URL";
         aTempMediaDescr[0].Value <<= aTempFileURL;
@@ -916,7 +920,7 @@ uno::Reference< util::XCloseable > OCommonEmbeddedObject::CreateTempDocFromLink_
         aTempMediaDescr[1].Value <<= m_aLinkFilterName;
     }
 
-    xResult = CreateDocFromMediaDescr_Impl( aTempMediaDescr );
+    uno::Reference< util::XCloseable > xResult = CreateDocFromMediaDescr_Impl( aTempMediaDescr );
 
     return xResult;
 }
@@ -1160,6 +1164,8 @@ void SAL_CALL OCommonEmbeddedObject::storeToEntry( const uno::Reference< embed::
                 uno::Exception,
                 uno::RuntimeException, std::exception )
 {
+    SAL_INFO( "embeddedobj.common", "entering >>OCommonEmbeddedObject::storeToEntry<<" );
+
     ::osl::ResettableMutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
@@ -1167,7 +1173,7 @@ void SAL_CALL OCommonEmbeddedObject::storeToEntry( const uno::Reference< embed::
     if ( m_nObjectState == -1 )
     {
         // the object is still not loaded
-        throw embed::WrongStateException( "Can't store object without persistence!",
+        throw embed::WrongStateException( "Can't store object without persistence",
                                         static_cast< ::cppu::OWeakObject* >(this) );
     }
 
@@ -1182,20 +1188,17 @@ void SAL_CALL OCommonEmbeddedObject::storeToEntry( const uno::Reference< embed::
     if ( m_bIsLink )
         return;
 
-    OSL_ENSURE( m_xParentStorage.is() && m_xObjectStorage.is(), "The object has no valid persistence!\n" );
+    OSL_ENSURE( m_xParentStorage.is() && m_xObjectStorage.is(), "The object has no valid persistence\n" );
 
     sal_Int32 nTargetStorageFormat = SOFFICE_FILEFORMAT_CURRENT;
     sal_Int32 nOriginalStorageFormat = SOFFICE_FILEFORMAT_CURRENT;
     try {
         nTargetStorageFormat = ::comphelper::OStorageHelper::GetXStorageFormat( xStorage );
     }
-    catch ( const beans::IllegalTypeException& )
+    catch ( ... )
     {
         // the container just has an unknown type, use current file format
-    }
-    catch ( const uno::Exception& )
-    {
-        SAL_WARN( "embeddedobj.common", "Can not retrieve target storage media type!" );
+        SAL_WARN( "embeddedobj.common", "Can not retrieve target storage media type" );
     }
     if (nTargetStorageFormat == SOFFICE_FILEFORMAT_60)
     {
@@ -1208,13 +1211,10 @@ void SAL_CALL OCommonEmbeddedObject::storeToEntry( const uno::Reference< embed::
     {
         nOriginalStorageFormat = ::comphelper::OStorageHelper::GetXStorageFormat( m_xParentStorage );
     }
-    catch ( const beans::IllegalTypeException& )
+    catch ( ... )
     {
         // the container just has an unknown type, use current file format
-    }
-    catch ( const uno::Exception& )
-    {
-        SAL_WARN( "embeddedobj.common", "Can not retrieve own storage media type!" );
+        SAL_WARN( "embeddedobj.common", "Can not retrieve own storage media type" );
     }
 
     bool bTryOptimization = false;
@@ -1291,6 +1291,8 @@ void SAL_CALL OCommonEmbeddedObject::storeAsEntry( const uno::Reference< embed::
                 uno::Exception,
                 uno::RuntimeException, std::exception )
 {
+    SAL_INFO( "embeddedobj.common", "entering >>OCommonEmbeddedObject::storeAsEntry<<" );
+
     // TODO: use lObjArgs
 
     ::osl::ResettableMutexGuard aGuard( m_aMutex );
@@ -1318,20 +1320,17 @@ void SAL_CALL OCommonEmbeddedObject::storeAsEntry( const uno::Reference< embed::
         return;
     }
 
-    OSL_ENSURE( m_xParentStorage.is() && m_xObjectStorage.is(), "The object has no valid persistence!\n" );
+    OSL_ENSURE( m_xParentStorage.is() && m_xObjectStorage.is(), "The object has no valid persistence\n" );
 
     sal_Int32 nTargetStorageFormat = SOFFICE_FILEFORMAT_CURRENT;
     sal_Int32 nOriginalStorageFormat = SOFFICE_FILEFORMAT_CURRENT;
     try {
         nTargetStorageFormat = ::comphelper::OStorageHelper::GetXStorageFormat( xStorage );
     }
-    catch ( const beans::IllegalTypeException& )
+    catch ( ... )
     {
         // the container just has an unknown type, use current file format
-    }
-    catch ( const uno::Exception& )
-    {
-        SAL_WARN( "embeddedobj.common", "Can not retrieve target storage media type!" );
+        SAL_WARN( "embeddedobj.common", "Can not retrieve target storage media type" );
     }
     if (nTargetStorageFormat == SOFFICE_FILEFORMAT_60)
     {
@@ -1344,13 +1343,10 @@ void SAL_CALL OCommonEmbeddedObject::storeAsEntry( const uno::Reference< embed::
     {
         nOriginalStorageFormat = ::comphelper::OStorageHelper::GetXStorageFormat( m_xParentStorage );
     }
-    catch ( const beans::IllegalTypeException& )
+    catch ( ... )
     {
         // the container just has an unknown type, use current file format
-    }
-    catch ( const uno::Exception& )
-    {
-        SAL_WARN( "embeddedobj.common", "Can not retrieve own storage media type!" );
+        SAL_WARN( "embeddedobj.common", "Can not retrieve own storage media type" );
     }
 
     PostEvent_Impl( "OnSaveAs" );
@@ -1608,7 +1604,7 @@ void SAL_CALL OCommonEmbeddedObject::storeOwn()
     }
     else
     {
-        OSL_ENSURE( m_xParentStorage.is() && m_xObjectStorage.is(), "The object has no valid persistence!\n" );
+        OSL_ENSURE( m_xParentStorage.is() && m_xObjectStorage.is(), "The object has no valid persistence\n" );
 
         if ( !m_xObjectStorage.is() )
             throw io::IOException(); //TODO: access denied
@@ -1617,13 +1613,10 @@ void SAL_CALL OCommonEmbeddedObject::storeOwn()
         try {
             nStorageFormat = ::comphelper::OStorageHelper::GetXStorageFormat( m_xParentStorage );
         }
-        catch ( const beans::IllegalTypeException& )
+        catch ( ... )
         {
             // the container just has an unknown type, use current file format
-        }
-        catch ( const uno::Exception& )
-        {
-            SAL_WARN( "embeddedobj.common", "Can not retrieve storage media type!" );
+            SAL_WARN( "embeddedobj.common", "can't retrieve storage media type" );
         }
         if (nStorageFormat == SOFFICE_FILEFORMAT_60)
         {
@@ -1809,22 +1802,15 @@ sal_Bool SAL_CALL OCommonEmbeddedObject::isStored() throw (css::uno::RuntimeExce
 
 void SAL_CALL OCommonEmbeddedObject::breakLink( const uno::Reference< embed::XStorage >& xStorage,
                                                 const OUString& sEntName )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                io::IOException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     ::osl::ResettableMutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
-        throw lang::DisposedException(); // TODO
+        return; ///throw lang::DisposedException();
 
     if ( !m_bIsLink )
     {
-        // it must be a linked initialized object
-        throw embed::WrongStateException(
-                    "The object is not a valid linked object!",
-                    static_cast< ::cppu::OWeakObject* >(this) );
+        SAL_WARN( "embeddedobj.common", "is not a linked initialized object" );
+        return;
     }
     else
     {
@@ -1832,32 +1818,35 @@ void SAL_CALL OCommonEmbeddedObject::breakLink( const uno::Reference< embed::XSt
         // all the set of interfaces required for OOo embedded object ( XEmbedPersist is not supported ).
     }
 
-    if ( !xStorage.is() )
-        throw lang::IllegalArgumentException( "No parent storage is provided!",
-                                            static_cast< ::cppu::OWeakObject* >(this),
-                                            1 );
-
+    if ( ! xStorage.is() )
+    {
+        SAL_WARN( "embeddedobj.common", "no parent storage is provided" );
+        return;
+    }
     if ( sEntName.isEmpty() )
-        throw lang::IllegalArgumentException( "Empty element name is provided!",
-                                            static_cast< ::cppu::OWeakObject* >(this),
-                                            2 );
+    {
+        SAL_WARN( "embeddedobj.common", "name of element is empty" );
+        return;
+    }
 
     if ( !m_bIsLink || m_nObjectState == -1 )
     {
-        // it must be a linked initialized object
-        throw embed::WrongStateException(
-                    "The object is not a valid linked object!",
-                    static_cast< ::cppu::OWeakObject* >(this) );
+        SAL_WARN( "embeddedobj.common", "is not a linked initialized object" );
+        return;
     }
 
     if ( m_bWaitSaveCompleted )
-        throw embed::WrongStateException(
-                    "The object waits for saveCompleted() call!",
-                    static_cast< ::cppu::OWeakObject* >(this) );
+    {
+        SAL_WARN( "embeddedobj.common", "The object waits for saveCompleted() call" );
+        return;
+    }
 
     uno::Reference< container::XNameAccess > xNameAccess( xStorage, uno::UNO_QUERY );
-    if ( !xNameAccess.is() )
-        throw uno::RuntimeException(); //TODO
+    if ( ! xNameAccess.is() )
+    {
+        SAL_WARN( "embeddedobj.common", "storage doesn't implement XNameAccess" );
+        throw uno::RuntimeException();
+    }
 
     m_bReadOnly = false;
 
@@ -1871,17 +1860,16 @@ void SAL_CALL OCommonEmbeddedObject::breakLink( const uno::Reference< embed::XSt
     // the document is a new embedded object so it must be marked as modified
     uno::Reference< util::XCloseable > xDocument = CreateTempDocFromLink_Impl();
     uno::Reference< util::XModifiable > xModif( m_pDocHolder->GetComponent(), uno::UNO_QUERY );
-    if ( !xModif.is() )
+    if ( ! xModif.is() )
         throw uno::RuntimeException();
     try
     {
         xModif->setModified( sal_True );
     }
-    catch( const uno::Exception& )
-    {}
+    catch( ... ) { }
 
     m_pDocHolder->SetComponent( xDocument, m_bReadOnly );
-    SAL_WARN_IF( !m_pDocHolder->GetComponent().is(), "embeddedobj.common", "If document can't be created, an exception must be thrown!" );
+    SAL_WARN_IF( !m_pDocHolder->GetComponent().is(), "embeddedobj.common", "document can't be created, and no exception is thrown" );
 
     if ( m_nObjectState == embed::EmbedStates::LOADED )
     {
@@ -1899,12 +1887,13 @@ void SAL_CALL OCommonEmbeddedObject::breakLink( const uno::Reference< embed::XSt
 
 
 sal_Bool SAL_CALL  OCommonEmbeddedObject::isLink()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
-        throw lang::DisposedException(); // TODO
+    {
+        SAL_WARN( "embeddedobj.common", "already disposed" );
+        return false;
+    }
 
     return m_bIsLink;
 }

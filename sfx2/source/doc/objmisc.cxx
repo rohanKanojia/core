@@ -219,9 +219,10 @@ void SfxObjectShell::FlushDocInfo()
 
 void SfxObjectShell::SetError( sal_uInt32 lErr, const OUString& aLogMessage )
 {
-    if(pImp->lErr==ERRCODE_NONE)
+    ///raise( SIGTRAP ); /* #include <signal.h> */
+    if( pImp->lErr == ERRCODE_NONE )
     {
-        pImp->lErr=lErr;
+        pImp->lErr = lErr;
 
         if( lErr != ERRCODE_NONE && !aLogMessage.isEmpty() )
             AddLog( aLogMessage );

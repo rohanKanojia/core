@@ -4062,6 +4062,10 @@ $(eval $(call gb_UnoApi_add_idlfiles,offapi,com/sun/star/ui/dialogs,\
 	XWizardController \
 	XWizardPage \
 ))
+$(eval $(call gb_UnoApi_add_idlfiles,offapi,com/sun/star/ui/test,\
+	XUIObject \
+	XUITest \
+))
 $(eval $(call gb_UnoApi_add_idlfiles,offapi,com/sun/star/util,\
 	AliasProgrammaticPair \
 	AtomClassRequest \

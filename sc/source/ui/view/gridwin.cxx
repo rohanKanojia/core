@@ -497,6 +497,7 @@ ScGridWindow::ScGridWindow( vcl::Window* pParent, ScViewData* pData, ScSplitPos 
             bAutoMarkVisible( false ),
             bListValButton( false )
 {
+    set_id("grid_window");
     switch(eWhich)
     {
         case SC_SPLIT_TOPLEFT:

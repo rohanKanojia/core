@@ -1579,10 +1579,10 @@ bool EscherPropertyContainer::CreateGraphicProperties(
                 if ( bMirrored || nAngle || nTransparency || nRed || nGreen || nBlue || (1.0 != fGamma) ||
                      (nFormat != GraphicFileFormat::BMP &&
                       nFormat != GraphicFileFormat::GIF &&
-                      nFormat != GraphicFileFormat::JPG &&
+                      nFormat != GraphicFileFormat::JPEG &&
                       nFormat != GraphicFileFormat::PNG &&
-                      nFormat != GraphicFileFormat::TIF &&
-                      nFormat != GraphicFileFormat::PCT &&
+                      nFormat != GraphicFileFormat::TIFF &&
+                      nFormat != GraphicFileFormat::PICT &&
                       nFormat != GraphicFileFormat::WMF &&
                       nFormat != GraphicFileFormat::EMF) )
                 {
@@ -4254,8 +4254,8 @@ sal_uInt32 EscherGraphicProvider::GetBlibID( SvStream& rPicOutStrm, const OStrin
             {
                 switch ( aGraphicLink.GetType() )
                 {
-                    case GFX_LINK_TYPE_NATIVE_JPG : p_EscherBlibEntry->meBlibType = PEG; break;
-                    case GFX_LINK_TYPE_NATIVE_PNG : p_EscherBlibEntry->meBlibType = PNG; break;
+                    case GfxLinkType::Native_JPEG : p_EscherBlibEntry->meBlibType = PEG; break;
+                    case GfxLinkType::Native_PNG : p_EscherBlibEntry->meBlibType = PNG; break;
 
                     // #i15508# added BMP type for better exports; need to check this
                     // checked - does not work that way, so keep out for now. It may
@@ -4263,9 +4263,9 @@ sal_uInt32 EscherGraphicProvider::GetBlibID( SvStream& rPicOutStrm, const OStrin
                     // carefully
                     // for more comments please check RtfAttributeOutput::FlyFrameGraphic
                     //
-                    // case GFX_LINK_TYPE_NATIVE_BMP : p_EscherBlibEntry->meBlibType = DIB; break;
+                    // case GfxLinkType::Native_BMP : p_EscherBlibEntry->meBlibType = DIB; break;
 
-                    case GFX_LINK_TYPE_NATIVE_WMF :
+                    case GfxLinkType::Native_WMF :
                     {
                         if ( pGraphicAry && ( p_EscherBlibEntry->mnSize > 0x2c ) )
                         {

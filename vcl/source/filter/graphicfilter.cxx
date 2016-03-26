@@ -181,7 +181,7 @@ inline OUString ImpGetExtension( const OUString &rPath )
     return aExt;
 }
 
-bool isPCT(SvStream& rStream, sal_uLong nStreamPos, sal_uLong nStreamLen)
+bool isPICT( SvStream& rStream, sal_uLong nStreamPos, sal_uLong nStreamLen )
 {
     sal_uInt8 sBuf[3];
     // store number format
@@ -407,13 +407,13 @@ static bool ImpPeekGraphicFormat( SvStream& rStream, OUString& rFormatExtension,
         }
     }
 
-    //--------------------------- TIF ------------------------------------
-    if( !bTest || rFormatExtension.startsWith( "TIF" ) )
+    //--------------------------- TIFF -----------------------------------
+    if( !bTest || rFormatExtension.startsWith( "TIFF" ) || rFormatExtension.startsWith( "TIF" ) )
     {
         bSomethingTested=true;
         if ( nFirstLong==0x49492a00 || nFirstLong==0x4d4d002a )
         {
-            rFormatExtension = "TIF";
+            rFormatExtension = "TIFF";
             return true;
         }
     }
@@ -440,14 +440,14 @@ static bool ImpPeekGraphicFormat( SvStream& rStream, OUString& rFormatExtension,
         }
     }
 
-    //--------------------------- JPG ------------------------------------
-    if( !bTest || rFormatExtension.startsWith( "JPG" ) )
+    //--------------------------- JPEG -----------------------------------
+    if( !bTest || rFormatExtension.startsWith( "JPEG" ) || rFormatExtension.startsWith( "JPG" ) )
     {
         bSomethingTested=true;
         if ( ( nFirstLong==0xffd8ffe0 && sFirstBytes[6]==0x4a && sFirstBytes[7]==0x46 && sFirstBytes[8]==0x49 && sFirstBytes[9]==0x46 ) ||
              ( nFirstLong==0xffd8fffe ) || ( 0xffd8ff00 == ( nFirstLong & 0xffffff00 ) ) )
         {
-            rFormatExtension = "JPG";
+            rFormatExtension = "JPEG";
             return true;
         }
     }
@@ -545,13 +545,13 @@ static bool ImpPeekGraphicFormat( SvStream& rStream, OUString& rFormatExtension,
 
     }
 
-    //--------------------------- PCT ------------------------------------
-    if( !bTest || rFormatExtension.startsWith( "PCT" ) )
+    //--------------------------- PICT ------------------------------------
+    if( !bTest || rFormatExtension.startsWith( "PICT" ) || rFormatExtension.startsWith( "PCT" ) )
     {
         bSomethingTested = true;
-        if (isPCT(rStream, nStreamPos, nStreamLen))
+        if ( isPICT( rStream, nStreamPos, nStreamLen ) )
         {
-            rFormatExtension = "PCT";
+            rFormatExtension = "PICT";
             return true;
         }
     }
@@ -1325,7 +1325,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
     sal_uLong               nStreamBegin;
     sal_uInt16              nStatus;
     GraphicReader*          pContext = rGraphic.GetContext();
-    GfxLinkType             eLinkType = GFX_LINK_TYPE_NONE;
+    GfxLinkType             eLinkType = GfxLinkType::None;
     bool                    bDummyContext = rGraphic.IsDummyContext();
     const bool              bLinkSet = rGraphic.IsLink();
     FilterConfigItem*       pFilterConfigItem = nullptr;
@@ -1424,7 +1424,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
             if( !ImportGIF( rIStream, rGraphic ) )
                 nStatus = GRFILTER_FILTERERROR;
             else
-                eLinkType = GFX_LINK_TYPE_NATIVE_GIF;
+                eLinkType = GfxLinkType::Native_GIF;
         }
         else if( aFilterName.equalsIgnoreAsciiCase( IMP_PNG ) )
         {
@@ -1464,7 +1464,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
                             aIStrm.Read(pGraphicContent, nGraphicContentSize);
                             aIStrm.Seek(aCurrentPosition);
                             ImportGIF(aIStrm, rGraphic);
-                            eLinkType = GFX_LINK_TYPE_NATIVE_GIF;
+                            eLinkType = GfxLinkType::Native_GIF;
                             break;
                         }
                     }
@@ -1472,7 +1472,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
                 }
             }
 
-            if ( eLinkType == GFX_LINK_TYPE_NONE )
+            if ( eLinkType == GfxLinkType::None )
             {
                 BitmapEx aBmpEx( aPNGReader.Read( aPreviewSizeHint ) );
                 if ( aBmpEx.IsEmpty() )
@@ -1480,7 +1480,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
                 else
                 {
                     rGraphic = aBmpEx;
-                    eLinkType = GFX_LINK_TYPE_NATIVE_PNG;
+                    eLinkType = GfxLinkType::Native_PNG;
                 }
             }
         }
@@ -1497,7 +1497,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
             if( !ImportJPEG( rIStream, rGraphic, nullptr, nImportFlags ) )
                 nStatus = GRFILTER_FILTERERROR;
             else
-                eLinkType = GFX_LINK_TYPE_NATIVE_JPG;
+                eLinkType = GfxLinkType::Native_JPEG;
         }
         else if( aFilterName.equalsIgnoreAsciiCase( IMP_SVG ) )
         {
@@ -1562,7 +1562,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
 
             if (bOkay)
             {
-                eLinkType = GFX_LINK_TYPE_NATIVE_SVG;
+                eLinkType = GfxLinkType::Native_SVG;
             }
             else
             {
@@ -1597,7 +1597,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
             else if (aFilterName.equalsIgnoreAsciiCase(IMP_BMP))
             {
                 // #i15508# added BMP type (checked, works)
-                eLinkType = GFX_LINK_TYPE_NATIVE_BMP;
+                eLinkType = GfxLinkType::Native_BMP;
             }
         }
         else if( aFilterName.equalsIgnoreAsciiCase( IMP_MOV ) )
@@ -1609,7 +1609,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
             {
                 rGraphic.SetDefaultType();
                 rIStream.Seek( STREAM_SEEK_TO_END );
-                eLinkType = GFX_LINK_TYPE_NATIVE_MOV;
+                eLinkType = GfxLinkType::Native_MOV;
             }
         }
         else if( aFilterName.equalsIgnoreAsciiCase( IMP_WMF ) ||
@@ -1621,7 +1621,7 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
             else
             {
                 rGraphic = aMtf;
-                eLinkType = GFX_LINK_TYPE_NATIVE_WMF;
+                eLinkType = GfxLinkType::Native_WMF;
             }
         }
         else if( aFilterName.equalsIgnoreAsciiCase( IMP_SVSGF )
@@ -1725,19 +1725,19 @@ sal_uInt16 GraphicFilter::ImportGraphic( Graphic& rGraphic, const OUString& rPat
                     // try to set link type if format matches
                     if( nFormat != GRFILTER_FORMAT_DONTKNOW )
                     {
-                        if( aShortName.startsWith( TIF_SHORTNAME ) )
-                            eLinkType = GFX_LINK_TYPE_NATIVE_TIF;
+                        if( aShortName.startsWith( TIFF_SHORTNAME ) )
+                            eLinkType = GfxLinkType::Native_TIFF;
                         else if( aShortName.startsWith( MET_SHORTNAME ) )
-                            eLinkType = GFX_LINK_TYPE_NATIVE_MET;
-                        else if( aShortName.startsWith( PCT_SHORTNAME ) )
-                            eLinkType = GFX_LINK_TYPE_NATIVE_PCT;
+                            eLinkType = GfxLinkType::Native_MET;
+                        else if( aShortName.startsWith( PICT_SHORTNAME ) )
+                            eLinkType = GfxLinkType::Native_PICT;
                     }
                 }
             }
         }
     }
 
-    if( nStatus == GRFILTER_OK && bCreateNativeLink && ( eLinkType != GFX_LINK_TYPE_NONE ) && !rGraphic.GetContext() && !bLinkSet )
+    if( nStatus == GRFILTER_OK && bCreateNativeLink && ( eLinkType != GfxLinkType::None ) && !rGraphic.GetContext() && !bLinkSet )
     {
         if (pGraphicContent == nullptr)
         {
@@ -2169,17 +2169,17 @@ IMPL_LINK_TYPED( GraphicFilter, FilterCallback, ConvertData&, rData, bool )
     OString aShortName;
     switch( rData.mnFormat )
     {
-        case( ConvertDataFormat::BMP ): aShortName = BMP_SHORTNAME; break;
-        case( ConvertDataFormat::GIF ): aShortName = GIF_SHORTNAME; break;
-        case( ConvertDataFormat::JPG ): aShortName = JPG_SHORTNAME; break;
-        case( ConvertDataFormat::MET ): aShortName = MET_SHORTNAME; break;
-        case( ConvertDataFormat::PCT ): aShortName = PCT_SHORTNAME; break;
-        case( ConvertDataFormat::PNG ): aShortName = PNG_SHORTNAME; break;
-        case( ConvertDataFormat::SVM ): aShortName = SVM_SHORTNAME; break;
-        case( ConvertDataFormat::TIF ): aShortName = TIF_SHORTNAME; break;
-        case( ConvertDataFormat::WMF ): aShortName = WMF_SHORTNAME; break;
-        case( ConvertDataFormat::EMF ): aShortName = EMF_SHORTNAME; break;
-        case( ConvertDataFormat::SVG ): aShortName = SVG_SHORTNAME; break;
+        case( ConvertDataFormat::BMP ):  aShortName = BMP_SHORTNAME; break;
+        case( ConvertDataFormat::GIF ):  aShortName = GIF_SHORTNAME; break;
+        case( ConvertDataFormat::JPEG ): aShortName = JPEG_SHORTNAME; break;
+        case( ConvertDataFormat::MET ):  aShortName = MET_SHORTNAME; break;
+        case( ConvertDataFormat::PICT ): aShortName = PICT_SHORTNAME; break;
+        case( ConvertDataFormat::PNG ):  aShortName = PNG_SHORTNAME; break;
+        case( ConvertDataFormat::SVM ):  aShortName = SVM_SHORTNAME; break;
+        case( ConvertDataFormat::TIFF ): aShortName = TIFF_SHORTNAME; break;
+        case( ConvertDataFormat::WMF ):  aShortName = WMF_SHORTNAME; break;
+        case( ConvertDataFormat::EMF ):  aShortName = EMF_SHORTNAME; break;
+        case( ConvertDataFormat::SVG ):  aShortName = SVG_SHORTNAME; break;
 
         default:
         break;

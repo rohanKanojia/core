@@ -412,7 +412,7 @@ bool PageSyncData::PlaySyncPageAct( PDFWriter& rWriter, sal_uInt32& rCurGDIMtfAc
                         if ( rGraphic.IsLink() )
                         {
                             GfxLinkType eType = rGraphic.GetLink().GetType();
-                            if ( eType == GFX_LINK_TYPE_NATIVE_JPG && mParaRects.size() >= 2 )
+                            if ( eType == GfxLinkType::Native_JPEG && mParaRects.size() >= 2 )
                             {
                                 mbGroupIgnoreGDIMtfActions =
                                 rOutDevData.HasAdequateCompression(
@@ -420,7 +420,7 @@ bool PageSyncData::PlaySyncPageAct( PDFWriter& rWriter, sal_uInt32& rCurGDIMtfAc
                                 if ( !mbGroupIgnoreGDIMtfActions )
                                     mCurrentGraphic = rGraphic;
                             }
-                            else if ( eType == GFX_LINK_TYPE_NATIVE_PNG )
+                            else if ( eType == GfxLinkType::Native_PNG )
                             {
                                 mCurrentGraphic = rGraphic;
                             }
@@ -453,7 +453,7 @@ bool PageSyncData::PlaySyncPageAct( PDFWriter& rWriter, sal_uInt32& rCurGDIMtfAc
                     bool bClippingNeeded = ( aOutputRect != aVisibleOutputRect ) && !aVisibleOutputRect.IsEmpty();
 
                     GfxLink   aGfxLink( aGraphic.GetLink() );
-                    if ( aGfxLink.GetType() == GFX_LINK_TYPE_NATIVE_JPG )
+                    if ( aGfxLink.GetType() == GfxLinkType::Native_JPEG )
                     {
                         if ( bClippingNeeded )
                         {
@@ -470,7 +470,7 @@ bool PageSyncData::PlaySyncPageAct( PDFWriter& rWriter, sal_uInt32& rCurGDIMtfAc
                         if( pData && nBytes )
                         {
                             aTmp.Write( pData, nBytes );
-                            rWriter.DrawJPGBitmap( aTmp, aGraphic.GetBitmap().GetBitCount() > 8, aGraphic.GetSizePixel(), aOutputRect, aMask );
+                            rWriter.DrawJPEG( aTmp, aGraphic.GetBitmap().GetBitCount() > 8, aGraphic.GetSizePixel(), aOutputRect, aMask );
                         }
 
                         if ( bClippingNeeded )
@@ -796,7 +796,7 @@ bool PDFExtOutDevData::HasAdequateCompression( const Graphic &rGraphic,
 {
     bool bReduceResolution = false;
 
-    assert( rGraphic.IsLink() && rGraphic.GetLink().GetType() == GFX_LINK_TYPE_NATIVE_JPG );
+    assert( rGraphic.IsLink() && rGraphic.GetLink().GetType() == GfxLinkType::Native_JPEG );
 
     // small items better off as PNG anyway
     if ( rGraphic.GetSizePixel().Width() < 32 &&

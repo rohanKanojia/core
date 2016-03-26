@@ -275,7 +275,7 @@ void GraphicCacheEntry::ImplFillSubstitute( Graphic& rSubstitute )
     const GraphicType   eOldType = rSubstitute.GetType();
     const bool          bDefaultType = ( rSubstitute.GetType() == GRAPHIC_DEFAULT );
 
-    if( rSubstitute.IsLink() && ( GFX_LINK_TYPE_NONE == maGfxLink.GetType() ) )
+    if( rSubstitute.IsLink() && ( GfxLinkType::None == maGfxLink.GetType() ) )
         maGfxLink = rSubstitute.GetLink();
 
     if(maSvgData.get())
@@ -306,7 +306,7 @@ void GraphicCacheEntry::ImplFillSubstitute( Graphic& rSubstitute )
         rSubstitute.SetAnimationNotifyHdl( aAnimationNotifyHdl );
     }
 
-    if( GFX_LINK_TYPE_NONE != maGfxLink.GetType() )
+    if( GfxLinkType::None != maGfxLink.GetType() )
     {
         rSubstitute.SetLink( maGfxLink );
     }

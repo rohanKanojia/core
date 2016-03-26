@@ -671,17 +671,16 @@ void SvXMLGraphicHelper::ImplInsertGraphicURL( const OUString& rURLStr, sal_uInt
                 {
                     switch( aGfxLink.GetType() )
                     {
-                        case GFX_LINK_TYPE_EPS_BUFFER: aExtension = ".eps"; break;
-                        case GFX_LINK_TYPE_NATIVE_GIF: aExtension = ".gif"; break;
-                        // #i15508# added BMP type for better exports (checked, works)
-                        case GFX_LINK_TYPE_NATIVE_BMP: aExtension = ".bmp"; break;
-                        case GFX_LINK_TYPE_NATIVE_JPG: aExtension = ".jpg"; break;
-                        case GFX_LINK_TYPE_NATIVE_PNG: aExtension = ".png"; break;
-                        case GFX_LINK_TYPE_NATIVE_TIF: aExtension = ".tif"; break;
-                        case GFX_LINK_TYPE_NATIVE_WMF: aExtension = ".wmf"; break;
-                        case GFX_LINK_TYPE_NATIVE_MET: aExtension = ".met"; break;
-                        case GFX_LINK_TYPE_NATIVE_PCT: aExtension = ".pct"; break;
-                        case GFX_LINK_TYPE_NATIVE_SVG:
+                        case GfxLinkType::EPS_Buffer: aExtension = ".eps"; break;
+                        case GfxLinkType::Native_GIF: aExtension = ".gif"; break;
+                        case GfxLinkType::Native_BMP: aExtension = ".bmp"; break; // #i15508# added BMP type for better exports
+                        case GfxLinkType::Native_JPEG: aExtension = ".jpg"; break;
+                        case GfxLinkType::Native_PNG: aExtension = ".png"; break;
+                        case GfxLinkType::Native_TIFF: aExtension = ".tiff"; break;
+                        case GfxLinkType::Native_WMF: aExtension = ".wmf"; break;
+                        case GfxLinkType::Native_MET: aExtension = ".met"; break;
+                        case GfxLinkType::Native_PICT: aExtension = ".pict"; break;
+                        case GfxLinkType::Native_SVG:
                             // backward-compat kludge: since no released OOo
                             // version to date can handle svg properly, wrap it up
                             // into an svm. slight catch22 here, since strict ODF

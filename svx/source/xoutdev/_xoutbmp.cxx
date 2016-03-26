@@ -36,7 +36,7 @@
 
 #define FORMAT_BMP  "bmp"
 #define FORMAT_GIF  "gif"
-#define FORMAT_JPG  "jpg"
+#define FORMAT_JPEG "jpg"
 #define FORMAT_PNG  "png"
 
 GraphicFilter* XOutBitmap::pGrfFilter = nullptr;
@@ -184,13 +184,13 @@ sal_uInt16 XOutBitmap::WriteGraphic( const Graphic& rGraphic, OUString& rFileNam
 
                 switch( aGfxLink.GetType() )
                 {
-                    case GFX_LINK_TYPE_NATIVE_GIF: aExt = FORMAT_GIF; break;
+                    case GfxLinkType::Native_GIF: aExt = FORMAT_GIF; break;
 
                     // #i15508# added BMP type for better exports (no call/trigger found, prob used in HTML export)
-                    case GFX_LINK_TYPE_NATIVE_BMP: aExt = FORMAT_BMP; break;
+                    case GfxLinkType::Native_BMP: aExt = FORMAT_BMP; break;
 
-                    case GFX_LINK_TYPE_NATIVE_JPG: aExt = FORMAT_JPG; break;
-                    case GFX_LINK_TYPE_NATIVE_PNG: aExt = FORMAT_PNG; break;
+                    case GfxLinkType::Native_JPEG: aExt = FORMAT_JPEG; break;
+                    case GfxLinkType::Native_PNG: aExt = FORMAT_PNG; break;
 
                     default:
                     break;
@@ -336,15 +336,15 @@ bool XOutBitmap::GraphicToBase64(const Graphic& rGraphic, OUString& rOUString)
     ConvertDataFormat aCvtType;
     switch(  aLink.GetType() )
     {
-        case GFX_LINK_TYPE_NATIVE_JPG:
-            aCvtType = ConvertDataFormat::JPG;
+        case GfxLinkType::Native_JPEG:
+            aCvtType = ConvertDataFormat::JPEG;
             aMimeType = "image/jpeg";
             break;
-        case GFX_LINK_TYPE_NATIVE_PNG:
+        case GfxLinkType::Native_PNG:
             aCvtType = ConvertDataFormat::PNG;
             aMimeType = "image/png";
             break;
-        case GFX_LINK_TYPE_NATIVE_SVG:
+        case GfxLinkType::Native_SVG:
             aCvtType = ConvertDataFormat::SVG;
             aMimeType = "image/svg+xml";
             break;
@@ -365,7 +365,7 @@ bool XOutBitmap::GraphicToBase64(const Graphic& rGraphic, OUString& rOUString)
     OUStringBuffer aStrBuffer;
     ::sax::Converter::encodeBase64(aStrBuffer,aOStmSeq);
     OUString aEncodedBase64Image = aStrBuffer.makeStringAndClear();
-    if( aLink.GetType() == GFX_LINK_TYPE_NATIVE_SVG )
+    if( aLink.GetType() == GfxLinkType::Native_SVG )
     {
       sal_Int32 ite(8);
       sal_Int32 nBufferLength(aOStmSeq.getLength());

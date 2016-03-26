@@ -565,7 +565,7 @@ ipsGraphicImport( SvStream & rStream, Graphic & rGraphic, FilterConfigItem* )
             if ( nPosTIFF && nSizeTIFF )
             {
                 rStream.Seek( nOrigPos + nPosTIFF );
-                if ( GraphicConverter::Import( rStream, aGraphic, ConvertDataFormat::TIF ) == ERRCODE_NONE )
+                if ( GraphicConverter::Import( rStream, aGraphic, ConvertDataFormat::TIFF ) == ERRCODE_NONE )
                 {
                     MakeAsMeta(aGraphic);
                     rStream.Seek( nOrigPos + nPosTIFF );
@@ -729,7 +729,7 @@ ipsGraphicImport( SvStream & rStream, Graphic & rGraphic, FilterConfigItem* )
                             aGraphic);
                     }
 
-                    GfxLink     aGfxLink( pBuf.get(), nPSSize, GFX_LINK_TYPE_EPS_BUFFER ) ;
+                    GfxLink     aGfxLink( pBuf.get(), nPSSize, GfxLinkType::EPS_Buffer ) ;
                     pBuf.release();
                     aMtf.AddAction( static_cast<MetaAction*>( new MetaEPSAction( Point(), Size( nWidth, nHeight ),
                                                                       aGfxLink, aGraphic.GetGDIMetaFile() ) ) );

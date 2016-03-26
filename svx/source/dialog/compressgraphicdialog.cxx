@@ -137,33 +137,33 @@ void CompressGraphicsDialog::Update()
 {
     GfxLinkType aLinkType = m_aGraphic.GetLink().GetType();
     OUString aGraphicTypeString;
-    switch(aLinkType)
+    switch( aLinkType )
     {
-        case GFX_LINK_TYPE_NATIVE_GIF:
+        case GfxLinkType::Native_GIF:
             aGraphicTypeString = SVX_RESSTR(STR_IMAGE_GIF);
             break;
-        case GFX_LINK_TYPE_NATIVE_JPG:
+        case GfxLinkType::Native_JPEG:
             aGraphicTypeString = SVX_RESSTR(STR_IMAGE_JPEG);
             break;
-        case GFX_LINK_TYPE_NATIVE_PNG:
+        case GfxLinkType::Native_PNG:
             aGraphicTypeString = SVX_RESSTR(STR_IMAGE_PNG);
             break;
-        case GFX_LINK_TYPE_NATIVE_TIF:
+        case GfxLinkType::Native_TIFF:
             aGraphicTypeString = SVX_RESSTR(STR_IMAGE_TIFF);
             break;
-        case GFX_LINK_TYPE_NATIVE_WMF:
+        case GfxLinkType::Native_WMF:
             aGraphicTypeString = SVX_RESSTR(STR_IMAGE_WMF);
             break;
-        case GFX_LINK_TYPE_NATIVE_MET:
+        case GfxLinkType::Native_MET:
             aGraphicTypeString = SVX_RESSTR(STR_IMAGE_MET);
             break;
-        case GFX_LINK_TYPE_NATIVE_PCT:
-            aGraphicTypeString = SVX_RESSTR(STR_IMAGE_PCT);
+        case GfxLinkType::Native_PICT:
+            aGraphicTypeString = SVX_RESSTR(STR_IMAGE_PICT);
             break;
-        case GFX_LINK_TYPE_NATIVE_SVG:
+        case GfxLinkType::Native_SVG:
             aGraphicTypeString = SVX_RESSTR(STR_IMAGE_SVG);
             break;
-        case GFX_LINK_TYPE_NATIVE_BMP:
+        case GfxLinkType::Native_BMP:
             aGraphicTypeString = SVX_RESSTR(STR_IMAGE_BMP);
             break;
         default:

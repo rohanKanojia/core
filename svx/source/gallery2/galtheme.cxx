@@ -267,16 +267,16 @@ INetURLObject GalleryTheme::ImplCreateUniqueURL( SgaObjKind eObjKind, ConvertDat
     {
         switch( nFormat )
         {
-            case ConvertDataFormat::BMP: pExt = ".bmp"; break;
-            case ConvertDataFormat::GIF: pExt = ".gif"; break;
-            case ConvertDataFormat::JPG: pExt = ".jpg"; break;
-            case ConvertDataFormat::MET: pExt = ".met"; break;
-            case ConvertDataFormat::PCT: pExt = ".pct"; break;
-            case ConvertDataFormat::PNG: pExt = ".png"; break;
-            case ConvertDataFormat::SVM: pExt = ".svm"; break;
-            case ConvertDataFormat::TIF: pExt = ".tif"; break;
-            case ConvertDataFormat::WMF: pExt = ".wmf"; break;
-            case ConvertDataFormat::EMF: pExt = ".emf"; break;
+            case ConvertDataFormat::BMP:  pExt = ".bmp"; break;
+            case ConvertDataFormat::GIF:  pExt = ".gif"; break;
+            case ConvertDataFormat::JPEG: pExt = ".jpg"; break;
+            case ConvertDataFormat::MET:  pExt = ".met"; break;
+            case ConvertDataFormat::PICT: pExt = ".pict"; break;
+            case ConvertDataFormat::PNG:  pExt = ".png"; break;
+            case ConvertDataFormat::SVM:  pExt = ".svm"; break;
+            case ConvertDataFormat::TIFF: pExt = ".tiff"; break;
+            case ConvertDataFormat::WMF:  pExt = ".wmf"; break;
+            case ConvertDataFormat::EMF:  pExt = ".emf"; break;
 
             default:
                 pExt = ".grf";
@@ -857,20 +857,19 @@ bool GalleryTheme::InsertGraphic( const Graphic& rGraphic, sal_uIntPtr nInsertPo
         {
             switch( aGfxLink.GetType() )
             {
-                case GFX_LINK_TYPE_EPS_BUFFER: nExportFormat = ConvertDataFormat::SVM; break;
-                case GFX_LINK_TYPE_NATIVE_GIF: nExportFormat = ConvertDataFormat::GIF; break;
+                case GfxLinkType::EPS_Buffer: nExportFormat = ConvertDataFormat::SVM; break;
+                case GfxLinkType::Native_GIF: nExportFormat = ConvertDataFormat::GIF; break;
 
                 // #i15508# added BMP type
-                // could not find/trigger a call to this, but should do no harm
-                case GFX_LINK_TYPE_NATIVE_BMP: nExportFormat = ConvertDataFormat::BMP; break;
+                case GfxLinkType::Native_BMP: nExportFormat = ConvertDataFormat::BMP; break;
 
-                case GFX_LINK_TYPE_NATIVE_JPG: nExportFormat = ConvertDataFormat::JPG; break;
-                case GFX_LINK_TYPE_NATIVE_PNG: nExportFormat = ConvertDataFormat::PNG; break;
-                case GFX_LINK_TYPE_NATIVE_TIF: nExportFormat = ConvertDataFormat::TIF; break;
-                case GFX_LINK_TYPE_NATIVE_WMF: nExportFormat = ConvertDataFormat::WMF; break;
-                case GFX_LINK_TYPE_NATIVE_MET: nExportFormat = ConvertDataFormat::MET; break;
-                case GFX_LINK_TYPE_NATIVE_PCT: nExportFormat = ConvertDataFormat::PCT; break;
-                case GFX_LINK_TYPE_NATIVE_SVG: nExportFormat = ConvertDataFormat::SVG; break;
+                case GfxLinkType::Native_JPEG: nExportFormat = ConvertDataFormat::JPEG; break;
+                case GfxLinkType::Native_PNG: nExportFormat = ConvertDataFormat::PNG; break;
+                case GfxLinkType::Native_TIFF: nExportFormat = ConvertDataFormat::TIFF; break;
+                case GfxLinkType::Native_WMF: nExportFormat = ConvertDataFormat::WMF; break;
+                case GfxLinkType::Native_MET: nExportFormat = ConvertDataFormat::MET; break;
+                case GfxLinkType::Native_PICT: nExportFormat = ConvertDataFormat::PICT; break;
+                case GfxLinkType::Native_SVG: nExportFormat = ConvertDataFormat::SVG; break;
                 default:
                     break;
             }

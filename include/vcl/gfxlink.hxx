@@ -81,26 +81,25 @@ struct ImpGfxLink
 //#endif // __PRIVATE
 
 
-enum GfxLinkType
+enum class GfxLinkType
 {
-    GFX_LINK_TYPE_NONE          = 0,
-    GFX_LINK_TYPE_EPS_BUFFER    = 1,
-    GFX_LINK_TYPE_NATIVE_GIF    = 2,    // Don't forget to update the following defines
-    GFX_LINK_TYPE_NATIVE_JPG    = 3,    // Don't forget to update the following defines
-    GFX_LINK_TYPE_NATIVE_PNG    = 4,    // Don't forget to update the following defines
-    GFX_LINK_TYPE_NATIVE_TIF    = 5,    // Don't forget to update the following defines
-    GFX_LINK_TYPE_NATIVE_WMF    = 6,    // Don't forget to update the following defines
-    GFX_LINK_TYPE_NATIVE_MET    = 7,    // Don't forget to update the following defines
-    GFX_LINK_TYPE_NATIVE_PCT    = 8,    // Don't forget to update the following defines
-    GFX_LINK_TYPE_NATIVE_SVG    = 9,    // Don't forget to update the following defines
-    GFX_LINK_TYPE_NATIVE_MOV    = 10,   // Don't forget to update the following defines
-    // #i15508# added BMP type support
-    GFX_LINK_TYPE_NATIVE_BMP    = 11,   // Don't forget to update the following defines
-    GFX_LINK_TYPE_USER          = 0xffff
+    None          = 0,
+    EPS_Buffer    = 1,
+    Native_GIF    = 2,
+    Native_JPEG   = 3,
+    Native_PNG    = 4,
+    Native_TIFF   = 5,
+    Native_WMF    = 6,
+    Native_MET    = 7,
+    Native_PICT   = 8,
+    Native_SVG    = 9,
+    Native_MOV    = 10,
+    Native_BMP    = 11,  // #i15508# added support for BMP type
+    User          = 0xffff
 };
 
-#define GFX_LINK_FIRST_NATIVE_ID    GFX_LINK_TYPE_NATIVE_GIF
-#define GFX_LINK_LAST_NATIVE_ID     GFX_LINK_TYPE_NATIVE_BMP
+#define GFX_LINK_FIRST_NATIVE_ID    GfxLinkType::Native_GIF
+#define GFX_LINK_LAST_NATIVE_ID     GfxLinkType::Native_BMP
 
 
 struct ImpBuffer;
@@ -112,7 +111,7 @@ class VCL_DLLPUBLIC GfxLink
 {
 private:
 
-    GfxLinkType         meType;
+    GfxLinkType         myType;
     ImpBuffer*          mpBuf;
     ImpSwap*            mpSwap;
     sal_uInt32          mnBufSize;
@@ -131,7 +130,7 @@ public:
     GfxLink&            operator=( const GfxLink& );
     bool            IsEqual( const GfxLink& ) const;
 
-    GfxLinkType         GetType() const { return meType;}
+    GfxLinkType         GetType() const { return myType; }
 
     void                SetUserId( sal_uInt32 nUserId ) { mnUserId = nUserId; }
     sal_uInt32          GetUserId() const { return mnUserId; }

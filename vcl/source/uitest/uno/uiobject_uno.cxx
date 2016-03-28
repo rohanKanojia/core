@@ -24,7 +24,10 @@ css::uno::Reference<css::ui::test::XUIObject> SAL_CALL UIObjectUnoObj::getChild(
     throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
+    SAL_DEBUG(mpObj->get_state()["ID"]);
+    SAL_DEBUG(rID);
     std::unique_ptr<UIObject> pObj = mpObj->get_child(rID);
+    assert(pObj);
     return new UIObjectUnoObj(std::move(pObj));
 }
 

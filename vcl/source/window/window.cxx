@@ -44,6 +44,9 @@
 #include <vcl/settings.hxx>
 #include <vcl/sysdata.hxx>
 
+#include "uitest/uiobject_impl.hxx"
+#include <vcl/uitest/uitest.hxx>
+
 #include <salframe.hxx>
 #include <salobj.hxx>
 #include <salinst.hxx>
@@ -1831,7 +1834,35 @@ void Window::KeyInput( const KeyEvent& rKEvt )
 
     if (cod.IsShift() && cod.IsMod1() && cod.GetCode() == KEY_F12)
     {
+        WindowUIObject aObject(this);
+        aObject.dumpState();
 
+        StringMap aMap;
+        aMap["TEXT"] = "asd%3";
+        aObject.execute("TYPE", aMap);
+    }
+
+    if (cod.IsShift() && cod.IsMod1() && cod.GetCode() == KEY_F10)
+    {
+        WindowUIObject aObject(this);
+        std::unique_ptr<UIObject> pCancelBtn = aObject.get_child("edit");
+        StringMap aMap;
+        aMap["TEXT"] = "asd%3";
+        pCancelBtn->execute("SET", aMap);
+        return;
+    }
+
+    if (cod.IsShift() && cod.IsMod1() && cod.GetCode() == KEY_F11)
+    {
+        WindowUIObject aObject(this);
+        aObject.dumpHierarchy();
+    }
+
+    if (cod.IsShift() && cod.IsMod1() && cod.GetCode() == KEY_F9)
+    {
+        UITest aTest;
+        std::unique_ptr<UIObject> pObject = aTest.getFocusTopWindow();
+        pObject->dumpState();
     }
 
     NotifyEvent aNEvt( MouseNotifyEvent::KEYINPUT, this, &rKEvt );

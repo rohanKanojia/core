@@ -1845,12 +1845,12 @@ void SfxMedium::Transfer_Impl()
         // makes sense only in case logic name is set
         if ( osl::FileBase::getFileURLFromSystemPath( pImp->m_aName, aNameURL )
              != osl::FileBase::E_None )
-            SAL_WARN( "sfx.doc", "The medium name is not convertible!" );
+            SAL_WARN( "sfx.doc", "The medium name is not convertible" );
     }
 
     if ( !aNameURL.isEmpty() && ( !pImp->m_eError || (pImp->m_eError & ERRCODE_WARNING_MASK) ) )
     {
-        SAL_INFO( "sfx.doc", "SfxMedium::Transfer_Impl, copying to target" );
+        SAL_WARN( "sfx.doc", "copying to target" );
 
         Reference < css::ucb::XCommandEnvironment > xEnv;
         Reference< XOutputStream > rOutStream;
@@ -1979,7 +1979,7 @@ void SfxMedium::Transfer_Impl()
             if ( aFile.open( osl_File_OpenFlag_Write ) == osl::FileBase::E_None )
             {
                 aFile.sync();
-                SAL_INFO( "sfx.doc", "fsync'd saved file '" << aDestURL << "'" );
+                SAL_WARN( "sfx.doc", "fsync'd saved file '" << aDestURL << "'" );
                 aFile.close();
             }
         }
@@ -2957,6 +2957,7 @@ void SfxMedium::CompleteReOpen()
     pImp->bUseInteractionHandler = bUseInteractionHandler;
 }
 
+
 SfxMedium::SfxMedium(const OUString &rName, StreamMode nOpenMode, std::shared_ptr<const SfxFilter> pFilter, SfxItemSet *pInSet) :
     pImp(new SfxMedium_Impl)
 {
@@ -2965,7 +2966,10 @@ SfxMedium::SfxMedium(const OUString &rName, StreamMode nOpenMode, std::shared_pt
     pImp->m_aLogicName = rName;
     pImp->m_nStorOpenMode = nOpenMode;
     Init_Impl();
+
+    SAL_WARN( "sfx.doc", "created SfxMedium \"" << rName << "\"" );
 }
+
 
 SfxMedium::SfxMedium(const OUString &rName, const OUString &rReferer, StreamMode nOpenMode, std::shared_ptr<const SfxFilter> pFilter, SfxItemSet *pInSet) :
     pImp(new SfxMedium_Impl)
@@ -2979,7 +2983,10 @@ SfxMedium::SfxMedium(const OUString &rName, const OUString &rReferer, StreamMode
     pImp->m_aLogicName = rName;
     pImp->m_nStorOpenMode = nOpenMode;
     Init_Impl();
+
+    SAL_WARN( "sfx.doc", "created SfxMedium \"" << rName << "\" with referer \"" << rReferer << "\"" );
 }
+
 
 SfxMedium::SfxMedium( const uno::Sequence<beans::PropertyValue>& aArgs ) :
     pImp(new SfxMedium_Impl)
@@ -3031,7 +3038,7 @@ SfxMedium::SfxMedium( const uno::Sequence<beans::PropertyValue>& aArgs ) :
             }
             else
             {
-                SAL_WARN( "sfx.doc", "Can not create a new temporary file for crash recovery!\n" );
+                SAL_WARN( "sfx.doc", "can't create a new temporary file for crash recovery" );
             }
         }
     }
@@ -3046,6 +3053,8 @@ SfxMedium::SfxMedium( const uno::Sequence<beans::PropertyValue>& aArgs ) :
     pImp->m_aLogicName = pFileNameItem->GetValue();
     pImp->m_nStorOpenMode = readOnly ? SFX_STREAM_READONLY : SFX_STREAM_READWRITE;
     Init_Impl();
+
+    SAL_WARN( "sfx.doc", "created SfxMedium from property values, file name item \"" << pFileNameItem->GetValue() << "\"" );
 }
 
 
@@ -3054,7 +3063,7 @@ SfxMedium::SfxMedium( const uno::Reference < embed::XStorage >& rStor, const OUS
 {
     OUString aType = SfxFilter::GetTypeFromStorage(rStor);
     pImp->m_pFilter = SfxGetpApp()->GetFilterMatcher().GetFilter4EA( aType );
-    DBG_ASSERT( pImp->m_pFilter, "No Filter for storage found!" );
+    DBG_ASSERT( pImp->m_pFilter, "no filter for storage found" );
 
     Init_Impl();
     pImp->xStorage = rStor;
@@ -3064,6 +3073,8 @@ SfxMedium::SfxMedium( const uno::Reference < embed::XStorage >& rStor, const OUS
     GetItemSet()->Put( SfxStringItem( SID_DOC_BASEURL, rBaseURL ) );
     if ( p )
         GetItemSet()->Put( *p );
+
+    SAL_WARN( "sfx.doc", "created SfxMedium from XStorage: base URL \"" << rBaseURL << "\"" );
 }
 
 
@@ -3071,7 +3082,7 @@ SfxMedium::SfxMedium( const uno::Reference < embed::XStorage >& rStor, const OUS
     pImp(new SfxMedium_Impl)
 {
     pImp->m_pFilter = SfxGetpApp()->GetFilterMatcher().GetFilter4EA( rTypeName );
-    DBG_ASSERT( pImp->m_pFilter, "No Filter for storage found!" );
+    DBG_ASSERT( pImp->m_pFilter, "no filter for storage found" );
 
     Init_Impl();
     pImp->xStorage = rStor;
@@ -3081,6 +3092,8 @@ SfxMedium::SfxMedium( const uno::Reference < embed::XStorage >& rStor, const OUS
     GetItemSet()->Put( SfxStringItem( SID_DOC_BASEURL, rBaseURL ) );
     if ( p )
         GetItemSet()->Put( *p );
+
+    SAL_WARN( "sfx.doc", "created SfxMedium from XStorage: base URL \"" << rBaseURL << "\", type name \"" << rTypeName << "\"" );
 }
 
 
@@ -3094,15 +3107,14 @@ SfxMedium::~SfxMedium()
     if( pImp->bIsTemp && !pImp->m_aName.isEmpty() )
     {
         OUString aTemp;
-        if ( osl::FileBase::getFileURLFromSystemPath( pImp->m_aName, aTemp )
-             != osl::FileBase::E_None )
+        if ( osl::FileBase::getFileURLFromSystemPath( pImp->m_aName, aTemp ) != osl::FileBase::E_None )
         {
-            SAL_WARN( "sfx.doc", "Physical name not convertible!");
+            SAL_WARN( "sfx.doc", "physical name not convertible");
         }
 
         if ( !::utl::UCBContentHelper::Kill( aTemp ) )
         {
-            SAL_WARN( "sfx.doc", "Couldn't remove temporary file!");
+            SAL_WARN( "sfx.doc", "couldn't remove temporary file");
         }
     }
 
@@ -3196,9 +3208,7 @@ SvKeyValueIterator* SfxMedium::GetHeaderAttributes_Impl()
 
                 pImp->xAttributes->Append( SvKeyValue( OUString("content-type"), aContentType ) );
             }
-            catch ( const css::uno::Exception& )
-            {
-            }
+            catch ( const css::uno::Exception& ) { }
         }
     }
 
@@ -3243,9 +3253,7 @@ uno::Sequence < util::RevisionTag > SfxMedium::GetVersionList( const uno::Refere
     {
         return xReader->load( xStorage );
     }
-    catch ( const uno::Exception& )
-    {
-    }
+    catch ( const uno::Exception& ) { }
 
     return uno::Sequence < util::RevisionTag >();
 }

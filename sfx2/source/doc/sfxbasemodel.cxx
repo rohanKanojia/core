@@ -3161,15 +3161,17 @@ void SfxBaseModel::postEvent_Impl( const OUString& aName, const Reference< frame
     if ( impl_isDisposed() )
         return;
 
-    DBG_ASSERT( !aName.isEmpty(), "Empty event name!" );
-    if (aName.isEmpty())
+    if ( aName.isEmpty() )
+    {
+        SAL_WARN( "sfx.doc", "event name is empty" );
         return;
+    }
 
     ::cppu::OInterfaceContainerHelper* pIC =
         m_pData->m_aInterfaceContainer.getContainer( cppu::UnoType<document::XDocumentEventListener>::get());
     if ( pIC )
     {
-        SAL_INFO("sfx.doc", "SfxDocumentEvent: " + aName);
+        SAL_WARN( "sfx.doc", "SfxDocumentEvent: " + aName );
 
         document::DocumentEvent aDocumentEvent( static_cast<frame::XModel*>(this), aName, xController, Any() );
 
@@ -3182,7 +3184,7 @@ void SfxBaseModel::postEvent_Impl( const OUString& aName, const Reference< frame
     pIC = m_pData->m_aInterfaceContainer.getContainer( cppu::UnoType<document::XEventListener>::get());
     if ( pIC )
     {
-        SAL_INFO("sfx.doc", "SfxEvent: " + aName);
+        SAL_WARN( "sfx.doc", "SfxEvent: " + aName );
 
         document::EventObject aEvent( static_cast<frame::XModel*>(this), aName );
 
@@ -3747,7 +3749,7 @@ void SAL_CALL SfxBaseModel::storeToStorage( const Reference< embed::XStorage >& 
             Exception,
             RuntimeException, std::exception )
 {
-    SAL_INFO( "sfx2.doc", "entering >>SfxBaseModel::storeToStorage<<" );
+    SAL_WARN( "sfx2.doc", "entering " << OSL_THIS_FUNC );
 
     SfxModelGuard aGuard( *this );
 

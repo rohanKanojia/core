@@ -86,17 +86,29 @@ using sw::mark::IMark;
 
 AttributeOutputBase& DocxExport::AttrOutput() const
 {
-    return *m_pAttrOutput;
+    if ( m_pAttrOutput )
+        return *m_pAttrOutput;
+    else
+        SAL_WARN( "sw.ww8", "m_pAttrOutput is nil" );
+    throw css::uno::RuntimeException( "m_pAttrOutput is nil" );
 }
 
 DocxAttributeOutput& DocxExport::DocxAttrOutput() const
 {
-    return *m_pAttrOutput;
+    if ( m_pAttrOutput )
+        return *m_pAttrOutput;
+    else
+        SAL_WARN( "sw.ww8", "m_pAttrOutput is nil" );
+    throw css::uno::RuntimeException( "m_pAttrOutput is nil" );
 }
 
 MSWordSections& DocxExport::Sections() const
 {
-    return *m_pSections;
+    if ( m_pSections )
+        return *m_pSections;
+    else
+        SAL_WARN( "sw.ww8", "m_pSections is nil" );
+    throw css::uno::RuntimeException( "m_pSections is nil" );
 }
 
 bool DocxExport::CollapseScriptsforWordOk( sal_uInt16 nScript, sal_uInt16 nWhich )
@@ -400,7 +412,7 @@ OString DocxExport::WriteOLEObject(SwOLEObj& rObject, OUString & io_rProgID)
     }
     catch (uno::Exception const& e)
     {
-        SAL_WARN("sw.ww8", "DocxExport::WriteOLEObject: exception: " << e.Message);
+        SAL_WARN("sw.ww8", "WriteOLEObject: exception: " << e.Message);
         return OString();
     }
 
@@ -428,6 +440,8 @@ void DocxExport::OutputDML(uno::Reference<drawing::XShape>& xShape)
 
 void DocxExport::ExportDocument_Impl()
 {
+    SAL_WARN( "sw.ww8", "ExportDocument_Impl()" );
+
     // Set the 'Track Revisions' flag in the settings structure
     m_aSettings.trackRevisions = 0 != ( nsRedlineMode_t::REDLINE_ON & m_nOrigRedlineMode );
 
@@ -562,6 +576,8 @@ void DocxExport::PrepareNewPageDesc( const SfxItemSet* pSet,
 
 void DocxExport::InitStyles()
 {
+    SAL_WARN( "sw.ww8", "InitStyles()" );
+
     m_pStyles = new MSWordStyles( *this, /*bListStyles =*/ true );
 
     // setup word/styles.xml and the relations + content type
@@ -581,10 +597,14 @@ void DocxExport::InitStyles()
 
     // switch the serializer back
     m_pAttrOutput->SetSerializer( m_pDocumentFS );
+
+    SAL_WARN( "sw.ww8", "done InitStyles()" );
 }
 
 void DocxExport::WriteFootnotesEndnotes()
 {
+    SAL_WARN( "sw.ww8", "WriteFootnotesEndnotes()" );
+
     if ( m_pAttrOutput->HasFootnotes() )
     {
         // setup word/styles.xml and the relations + content type
@@ -630,6 +650,8 @@ void DocxExport::WriteFootnotesEndnotes()
 
 void DocxExport::WritePostitFields()
 {
+    SAL_WARN( "sw.ww8", "WritePostitFields()" );
+
     if ( m_pAttrOutput->HasPostitFields() )
     {
         m_pFilter->addRelation( m_pDocumentFS->getOutputStream(),
@@ -650,6 +672,8 @@ void DocxExport::WritePostitFields()
 
 void DocxExport::WriteNumbering()
 {
+    SAL_WARN( "sw.ww8", "WriteNumbering()" );
+
     if ( !m_pUsedNumTable )
         return; // no numbering is used
 
@@ -684,6 +708,8 @@ void DocxExport::WriteNumbering()
 
 void DocxExport::WriteHeaderFooter( const SwFormat& rFormat, bool bHeader, const char* pType )
 {
+    SAL_WARN( "sw.ww8", "WriteHeaderFooter()" );
+
     // setup the xml stream
     OUString aRelId;
     ::sax_fastparser::FSHelperPtr pFS;
@@ -762,6 +788,8 @@ void DocxExport::WriteHeaderFooter( const SwFormat& rFormat, bool bHeader, const
 
 void DocxExport::WriteFonts()
 {
+    SAL_WARN( "sw.ww8", "WriteFonts()" );
+
     m_pFilter->addRelation( m_pDocumentFS->getOutputStream(),
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable",
             "fontTable.xml" );
@@ -804,6 +832,8 @@ void DocxExport::WriteProperties( )
 
 void DocxExport::WriteSettings()
 {
+    SAL_WARN( "sw.ww8", "WriteSettings()" );
+
     SwViewShell *pViewShell(m_pDoc->getIDocumentLayoutAccess().GetCurrentViewShell());
     if( !pViewShell && !m_aSettings.hasData() && !m_pAttrOutput->HasFootnotes() && !m_pAttrOutput->HasEndnotes())
         return;
@@ -958,6 +988,8 @@ void DocxExport::WriteSettings()
 
 void DocxExport::WriteTheme()
 {
+    SAL_WARN( "sw.ww8", "WriteTheme()" );
+
     uno::Reference< beans::XPropertySet > xPropSet( m_pDoc->GetDocShell()->GetBaseModel(), uno::UNO_QUERY_THROW );
 
     uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
@@ -996,6 +1028,8 @@ void DocxExport::WriteTheme()
 
 void DocxExport::WriteGlossary()
 {
+    SAL_WARN( "sw.ww8", "WriteGlossary()" );
+
     uno::Reference< beans::XPropertySet > xPropSet( m_pDoc->GetDocShell()->GetBaseModel(), uno::UNO_QUERY_THROW );
 
     uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
@@ -1067,6 +1101,8 @@ void DocxExport::WriteGlossary()
 
 void DocxExport::WriteCustomXml()
 {
+    SAL_WARN( "sw.ww8", "WriteCustomXml()" );
+
     uno::Reference< beans::XPropertySet > xPropSet( m_pDoc->GetDocShell()->GetBaseModel(), uno::UNO_QUERY_THROW );
 
     uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
@@ -1138,6 +1174,8 @@ void DocxExport::WriteCustomXml()
 
 void DocxExport::WriteActiveX()
 {
+    SAL_WARN( "sw.ww8", "WriteActiveX()" );
+
     uno::Reference< beans::XPropertySet > xPropSet( m_pDoc->GetDocShell()->GetBaseModel(), uno::UNO_QUERY_THROW );
 
     uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
@@ -1232,6 +1270,8 @@ void DocxExport::WriteActiveX()
 
 void DocxExport::WriteEmbeddings()
 {
+    SAL_WARN( "sw.ww8", "WriteEmbeddings()" );
+
     uno::Reference< beans::XPropertySet > xPropSet( m_pDoc->GetDocShell()->GetBaseModel(), uno::UNO_QUERY_THROW );
 
     uno::Reference< beans::XPropertySetInfo > xPropSetInfo = xPropSet->getPropertySetInfo();
@@ -1310,6 +1350,8 @@ bool DocxExport::isMirroredMargin()
 
 void DocxExport::WriteMainText()
 {
+    SAL_WARN( "sw.ww8", "WriteMainText()" );
+
     // setup the namespaces
     m_pDocumentFS->startElementNS( XML_w, XML_document, MainXmlNamespaces());
 
@@ -1346,6 +1388,8 @@ void DocxExport::WriteMainText()
     // finish body and document
     m_pDocumentFS->endElementNS( XML_w, XML_body );
     m_pDocumentFS->endElementNS( XML_w, XML_document );
+
+    SAL_WARN( "sw.ww8", "done WriteMainText()" );
 }
 
 XFastAttributeListRef DocxExport::MainXmlNamespaces()
@@ -1462,6 +1506,8 @@ DocxExport::DocxExport( DocxExportFilter *pFilter, SwDoc *pDocument, SwPaM *pCur
 
     // the related drawing export
     m_pSdrExport = new DocxSdrExport( *this, m_pDocumentFS, m_pDrawingML );
+
+    SAL_WARN( "sw.ww8", "created DocxExport" );
 }
 
 DocxExport::~DocxExport()

@@ -3803,7 +3803,7 @@ void CheckBox::ShowFocus(const Rectangle& rRect)
 
 FactoryFunction CheckBox::GetUITestFactory() const
 {
-    return EditUIObject::create;
+    return CheckBoxUIObject::create;
 }
 
 ImageButton::ImageButton( vcl::Window* pParent, WinBits nStyle ) :

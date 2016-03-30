@@ -44,7 +44,7 @@
 #include <vcl/settings.hxx>
 #include <vcl/sysdata.hxx>
 
-#include "uitest/uiobject_impl.hxx"
+#include <vcl/uitest/uiobject.hxx>
 #include <vcl/uitest/uitest.hxx>
 
 #include <salframe.hxx>

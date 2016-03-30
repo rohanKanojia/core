@@ -198,6 +198,8 @@ public:
 
     //calls Ok without closing dialog
     bool Apply();
+
+    virtual FactoryFunction GetUITestFactory() const override;
 };
 
 namespace sfx { class ItemConnectionBase; }

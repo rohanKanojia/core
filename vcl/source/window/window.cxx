@@ -3856,6 +3856,11 @@ const OUString& Window::get_id() const
     return mpWindowImpl->maID;
 }
 
+FactoryFunction Window::GetUITestFactory() const
+{
+    return WindowUIObject::create;
+}
+
 } /* namespace vcl */
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -37,7 +37,7 @@
 #include <sfx2/sfxdlg.hxx>
 #include <sfx2/itemconnect.hxx>
 
-#include "uitest/uitest_factory.hxx"
+#include "uitest/sfx_uiobject.hxx"
 
 #include "dialog.hrc"
 #include "helpid.hrc"
@@ -332,13 +332,6 @@ SfxTabDialog::SfxTabDialog
     , pExampleSet(nullptr)
 {
     Init_Impl(bEditFmt);
-
-    static bool bRegisterUITest = false;
-    if (!bRegisterUITest)
-    {
-        SfxUITestFactory::registerSfxTabDialog();
-        bRegisterUITest = true;
-    }
 }
 
 
@@ -1347,6 +1340,11 @@ void SfxTabDialog::SetInputSet( const SfxItemSet* pInSet )
         pExampleSet = new SfxItemSet( *pSet );
         pOutSet = new SfxItemSet( *pSet->GetPool(), pSet->GetRanges() );
     }
+}
+
+FactoryFunction SfxTabDialog::GetUITestFactory() const
+{
+    return SfxTabDialogUIObject::create;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

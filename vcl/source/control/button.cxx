@@ -36,6 +36,7 @@
 #include <vcl/edit.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/vclstatuslistener.hxx>
+#include <uitest/uiobject_impl.hxx>
 
 #include <svids.hrc>
 #include <svdata.hxx>
@@ -620,6 +621,11 @@ bool Button::set_property(const OString &rKey, const OString &rValue)
 void Button::statusChanged(const css::frame::FeatureStateEvent& rEvent)
 {
     Enable(rEvent.IsEnabled);
+}
+
+FactoryFunction Button::GetUITestFactory() const
+{
+    return ButtonUIObject::create;
 }
 
 IMPL_STATIC_LINK_TYPED( Button, dispatchCommandHandler, Button*, pButton, void )
@@ -3793,6 +3799,11 @@ void CheckBox::ShowFocus(const Rectangle& rRect)
                           ControlState::FOCUSED, aControlValue, OUString());
     }
     Button::ShowFocus(rRect);
+}
+
+FactoryFunction CheckBox::GetUITestFactory() const
+{
+    return EditUIObject::create;
 }
 
 ImageButton::ImageButton( vcl::Window* pParent, WinBits nStyle ) :

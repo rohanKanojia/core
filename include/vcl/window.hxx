@@ -33,6 +33,7 @@
 #include <vcl/keycodes.hxx>
 #include <vcl/region.hxx>
 #include <vcl/salnativewidgets.hxx>
+#include <vcl/uitest/factory.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/ref.hxx>
 #include <cppuhelper/weakref.hxx>
@@ -1567,6 +1568,8 @@ public:
 
     virtual OUString GetSurroundingText() const;
     virtual Selection GetSurroundingTextSelection() const;
+
+    virtual FactoryFunction GetUITestFactory() const;
 };
 
 }

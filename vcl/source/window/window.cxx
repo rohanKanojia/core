@@ -1835,18 +1835,18 @@ void Window::KeyInput( const KeyEvent& rKEvt )
 
     if (cod.IsShift() && cod.IsMod1() && cod.GetCode() == KEY_F12)
     {
-        WindowUIObject aObject(this);
-        aObject.dumpState();
+        std::unique_ptr<UIObject> pObject = GetUITestFactory()(this);
+        pObject->dumpState();
 
         StringMap aMap;
         aMap["TEXT"] = "asd%3";
-        aObject.execute("TYPE", aMap);
+        pObject->execute("TYPE", aMap);
     }
 
     if (cod.IsShift() && cod.IsMod1() && cod.GetCode() == KEY_F10)
     {
-        WindowUIObject aObject(this);
-        std::unique_ptr<UIObject> pCancelBtn = aObject.get_child("edit");
+        std::unique_ptr<UIObject> pObject = GetUITestFactory()(this);
+        std::unique_ptr<UIObject> pCancelBtn = pObject->get_child("edit");
         StringMap aMap;
         aMap["TEXT"] = "asd%3";
         pCancelBtn->execute("SET", aMap);
@@ -1855,8 +1855,8 @@ void Window::KeyInput( const KeyEvent& rKEvt )
 
     if (cod.IsShift() && cod.IsMod1() && cod.GetCode() == KEY_F11)
     {
-        WindowUIObject aObject(this);
-        aObject.dumpHierarchy();
+        std::unique_ptr<UIObject> pObject = GetUITestFactory()(this);
+        pObject->dumpHierarchy();
     }
 
     if (cod.IsShift() && cod.IsMod1() && cod.GetCode() == KEY_F9)

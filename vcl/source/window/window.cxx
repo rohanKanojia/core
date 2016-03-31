@@ -262,85 +262,67 @@ void Window::dispose()
 #if OSL_DEBUG_LEVEL > 0
     if ( true ) // always perform these tests in debug builds
     {
-        OStringBuffer aErrorStr;
-        bool        bError = false;
-        vcl::Window*     pTempWin;
-
         if ( mpWindowImpl->mpFirstChild )
         {
-            OStringBuffer aTempStr("Window (");
-            aTempStr.append(lcl_createWindowInfo(this));
-            aTempStr.append(") with live children destroyed: ");
-            pTempWin = mpWindowImpl->mpFirstChild;
+            SAL_WARN( "vcl.window", "destroyed Window ( " << lcl_createWindowInfo( this ) << " ) with live children :" );
+            vcl::Window* pTempWin = mpWindowImpl->mpFirstChild;
             while ( pTempWin )
             {
-                aTempStr.append(lcl_createWindowInfo(pTempWin));
+                SAL_WARN( "vcl.window", "   live child " << lcl_createWindowInfo( pTempWin ) );
                 pTempWin = pTempWin->mpWindowImpl->mpNext;
             }
-            OSL_FAIL( aTempStr.getStr() );
-            Application::Abort(OStringToOUString(aTempStr.makeStringAndClear(), RTL_TEXTENCODING_UTF8));   // abort in debug builds, this must be fixed!
+            throw css::uno::RuntimeException( "destroyed Window with live children" );
         }
 
-        if (mpWindowImpl->mpFrameData != nullptr)
+        if ( mpWindowImpl->mpFrameData )
         {
-            pTempWin = mpWindowImpl->mpFrameData->mpFirstOverlap;
+            OStringBuffer aWindowList;
+            bool foundSystemWindows = false;
+            vcl::Window* pTempWin = mpWindowImpl->mpFrameData->mpFirstOverlap;
             while ( pTempWin )
             {
                 if ( ImplIsRealParentPath( pTempWin ) )
                 {
-                    bError = true;
-                    aErrorStr.append(lcl_createWindowInfo(pTempWin));
+                    foundSystemWindows = true;
+                    aWindowList.append( lcl_createWindowInfo( pTempWin ) );
                 }
                 pTempWin = pTempWin->mpWindowImpl->mpNextOverlap;
             }
-            if ( bError )
+            if ( foundSystemWindows )
             {
-                OStringBuffer aTempStr;
-                aTempStr.append("Window (");
-                aTempStr.append(lcl_createWindowInfo(this));
-                aTempStr.append(") with live SystemWindows destroyed: ");
-                aTempStr.append(aErrorStr.toString());
-                OSL_FAIL(aTempStr.getStr());
-                // abort in debug builds, must be fixed!
-                Application::Abort(OStringToOUString(
-                                     aTempStr.makeStringAndClear(), RTL_TEXTENCODING_UTF8));
+                SAL_WARN( "vcl.window", "destroyed Window ( " << lcl_createWindowInfo( this ) << " ) with live SystemWindows : " << aWindowList.toString() );
+                throw css::uno::RuntimeException( "destroyed Window with live SystemWindows" );
             }
         }
 
-        bError = false;
-        pTempWin = pSVData->maWinData.mpFirstFrame;
+        bool foundSystemWindows = false;
+        vcl::Window* pTempWin = pSVData->maWinData.mpFirstFrame;
+        OStringBuffer aWindowList;
         while ( pTempWin )
         {
             if ( ImplIsRealParentPath( pTempWin ) )
             {
-                bError = true;
-                aErrorStr.append(lcl_createWindowInfo(pTempWin));
+                foundSystemWindows = true;
+                aWindowList.append( lcl_createWindowInfo( pTempWin ) );
             }
             pTempWin = pTempWin->mpWindowImpl->mpFrameData->mpNextFrame;
         }
-        if ( bError )
+        if ( foundSystemWindows )
         {
-            OStringBuffer aTempStr( "Window (" );
-            aTempStr.append(lcl_createWindowInfo(this));
-            aTempStr.append(") with live SystemWindows destroyed: ");
-            aTempStr.append(aErrorStr.toString());
-            OSL_FAIL( aTempStr.getStr() );
-            Application::Abort(OStringToOUString(aTempStr.makeStringAndClear(), RTL_TEXTENCODING_UTF8));   // abort in debug builds, this must be fixed!
+            SAL_WARN( "vcl.window", "destroyed Window ( " << lcl_createWindowInfo( this ) << " ) with live SystemWindows : " << aWindowList.toString() );
+            throw css::uno::RuntimeException( "destroyed Window with live SystemWindows" );
         }
 
         if ( mpWindowImpl->mpFirstOverlap )
         {
-            OStringBuffer aTempStr("Window (");
-            aTempStr.append(lcl_createWindowInfo(this));
-            aTempStr.append(") with live SystemWindows destroyed: ");
-            pTempWin = mpWindowImpl->mpFirstOverlap;
-            while ( pTempWin )
+            SAL_WARN( "vcl.window", "destroyed Window ( " << lcl_createWindowInfo( this ) << " ) with live SystemWindows :" );
+            vcl::Window* tempWin = mpWindowImpl->mpFirstOverlap;
+            while ( tempWin )
             {
-                aTempStr.append(lcl_createWindowInfo(pTempWin));
+                SAL_WARN( "vcl.window", "   live SystemWindow " << lcl_createWindowInfo( tempWin ) );
                 pTempWin = pTempWin->mpWindowImpl->mpNext;
             }
-            OSL_FAIL( aTempStr.getStr() );
-            Application::Abort(OStringToOUString(aTempStr.makeStringAndClear(), RTL_TEXTENCODING_UTF8));   // abort in debug builds, this must be fixed!
+            throw css::uno::RuntimeException( "destroyed Window with live SystemWindows" );
         }
 
         vcl::Window* pMyParent = GetParent();
@@ -356,11 +338,8 @@ void Window::dispose()
         }
         if ( pMySysWin && pMySysWin->ImplIsInTaskPaneList( this ) )
         {
-            OStringBuffer aTempStr("Window (");
-            aTempStr.append(lcl_createWindowInfo(this));
-            aTempStr.append(") still in TaskPanelList!");
-            OSL_FAIL( aTempStr.getStr() );
-            Application::Abort(OStringToOUString(aTempStr.makeStringAndClear(), RTL_TEXTENCODING_UTF8));   // abort in debug builds, this must be fixed!
+            SAL_WARN( "vcl.window", "Window ( " << lcl_createWindowInfo(this) << " ) is still in TaskPaneList");
+            throw css::uno::RuntimeException( "Window is still in TaskPanelList" );
         }
     }
 #endif
@@ -384,10 +363,7 @@ void Window::dispose()
         }
         else
         {
-            OStringBuffer aTempStr("Window (");
-            aTempStr.append(OUStringToOString(GetText(), RTL_TEXTENCODING_UTF8));
-            aTempStr.append(") not found in TaskPanelList!");
-            OSL_FAIL( aTempStr.getStr() );
+            SAL_WARN( "vcl.window", "Window ( " << lcl_createWindowInfo( this ) << " ) not found in TaskPaneList" );
         }
     }
 
